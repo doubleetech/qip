@@ -1,0 +1,21 @@
+# QIP — things that should never be committed
+
+# Local config with secrets
+/config/config.php
+
+# Uploads (user-generated content)
+/uploads/*
+!/uploads/.gitkeep
+
+# Vendor (Google API client library — install on each machine)
+/vendor/
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.sublime-*
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
