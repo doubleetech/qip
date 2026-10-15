@@ -846,3 +846,121 @@
   z-index: 999;
 }
 .skip:focus { left: 0; }
+
+/* ================== Line item editor ================== */
+.line-items { width:100%; border-collapse:collapse; }
+.line-items th {
+  text-align:left;
+  font-size:.72rem;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:var(--text-light-muted);
+  font-weight:600;
+  padding:8px 10px;
+  border-bottom:1px solid var(--light-200);
+}
+.line-items th.num { text-align:right; }
+.line-items td {
+  padding:6px 6px;
+  vertical-align:top;
+  border-bottom:1px solid var(--light-100);
+}
+.line-items input {
+  width:100%;
+  min-height:38px;
+  padding:8px 10px;
+  font-size:.9rem;
+  background:#fff;
+  border:1px solid var(--light-200);
+  border-radius:var(--r-sm);
+  color:var(--text-light);
+}
+.line-items input:focus {
+  outline:none;
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px rgba(34,197,94,.18);
+}
+.line-items .col-desc  { min-width:220px; }
+.line-items .col-qty   { width:90px; }
+.line-items .col-price { width:130px; }
+.line-items .col-total { width:120px; text-align:right; }
+.line-items .col-x     { width:44px; }
+.line-items .line-total {
+  display:block;
+  padding:9px 4px;
+  font-variant-numeric:tabular-nums;
+  font-weight:600;
+  color:var(--text-light);
+  text-align:right;
+}
+.line-items .remove-row {
+  width:34px; height:34px;
+  border-radius:var(--r-sm);
+  border:1px solid var(--light-200);
+  background:#fff;
+  color:var(--text-light-muted);
+}
+.line-items .remove-row:hover {
+  color:var(--overdue);
+  border-color:rgba(239,68,68,.4);
+}
+
+.totals {
+  margin-left:auto;
+  width:100%;
+  max-width:340px;
+  margin-top:16px;
+}
+.totals__row {
+  display:flex;
+  justify-content:space-between;
+  padding:8px 0;
+  font-size:.9rem;
+  color:var(--text-light-muted);
+}
+.totals__row b {
+  color:var(--text-light);
+  font-variant-numeric:tabular-nums;
+  font-weight:600;
+}
+.totals__row--grand {
+  border-top:1px solid var(--light-200);
+  padding-top:12px;
+  margin-top:4px;
+  font-size:1.05rem;
+}
+.totals__row--grand b {
+  font-family:var(--font-display);
+  font-size:1.25rem;
+  color:var(--text-light);
+}
+
+@media (max-width:640px) {
+  .line-items thead { display:none; }
+  .line-items tr {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    padding:12px 0;
+    border-bottom:1px solid var(--light-200);
+  }
+  .line-items td { padding:0; border:0; }
+  .line-items .col-desc { grid-column:1 / -1; }
+  .line-items .col-total { text-align:left; }
+}
+
+/* Line item labels visible only on mobile */
+@media (max-width:640px) {
+  .line-items .col-qty::before   { content: "Qty"; }
+  .line-items .col-price::before { content: "Unit price"; }
+  .line-items .col-qty::before,
+  .line-items .col-price::before {
+    display: block;
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text-light-muted);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+}

@@ -193,7 +193,7 @@ $authUrl = google_auth_url();
             <div class="mock-float__icon mock-float__icon--blue"><i class="fa-solid fa-user-plus"></i></div>
             <div>
               <div class="mock-float__label">New Client</div>
-              <div class="mock-float__value">Olumide Fash</div>
+              <div class="mock-float__value">Double E</div>
             </div>
           </div>
 
