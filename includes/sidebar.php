@@ -11,6 +11,7 @@ $nav = [
     ['href' => 'pages/invoices.php', 'icon' => 'fa-file-invoice', 'text' => 'Invoices'],
     ['href' => 'pages/quotes.php',   'icon' => 'fa-file-lines',   'text' => 'Quotes'],
     ['href' => 'pages/payments.php', 'icon' => 'fa-money-bill-wave', 'text' => 'Payments'],
+    ['href' => 'pages/expenses.php', 'icon' => 'fa-receipt',      'text' => 'Expenses'],
   ]],
   ['label' => 'Directory', 'items' => [
     ['href' => 'pages/clients.php', 'icon' => 'fa-users', 'text' => 'Clients'],

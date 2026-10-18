@@ -6,14 +6,28 @@ require_business();
 $q      = trim((string) get('q', ''));
 $status = (string) get('status', 'all');
 
-$invoices = invoices_list($q !== '' ? $q : null, $status);
+$computedOnly = in_array($status, ['partially_paid', 'paid', 'overdue'], true);
+$listStatus   = $computedOnly ? 'all' : $status;
+
+$invoices = invoices_list($q !== '' ? $q : null, $listStatus);
+
+if ($computedOnly) {
+    $paidMap = invoices_paid_map(array_map(fn($i) => (int) $i['id'], $invoices));
+    $invoices = array_values(array_filter($invoices, function ($inv) use ($paidMap, $status) {
+        $paid = $paidMap[(int) $inv['id']] ?? 0.0;
+        return invoice_effective_status($inv, $paid) === $status;
+    }));
+}
 
 $filters = [
-    'all'       => 'All',
-    'draft'     => 'Draft',
-    'sent'      => 'Sent',
-    'pending'   => 'Pending',
-    'cancelled' => 'Cancelled',
+    'all'            => 'All',
+    'draft'          => 'Draft',
+    'sent'           => 'Sent',
+    'pending'        => 'Pending',
+    'partially_paid' => 'Partially paid',
+    'paid'           => 'Paid',
+    'overdue'        => 'Overdue',
+    'cancelled'      => 'Cancelled',
 ];
 
 $page_title = 'Invoices';
@@ -99,6 +113,7 @@ include __DIR__ . '/../includes/app-header.php';
 
   <?php else: ?>
 
+    <?php $paidMap = invoices_paid_map(array_map(fn($i) => (int) $i['id'], $invoices)); ?>
     <div class="table-wrap">
       <table class="table">
         <thead>
@@ -108,12 +123,18 @@ include __DIR__ . '/../includes/app-header.php';
             <th>Issued</th>
             <th>Due</th>
             <th class="num">Total</th>
+            <th class="num">Balance</th>
             <th>Status</th>
             <th class="actions">Actions</th>
           </tr>
         </thead>
         <tbody>
           <?php foreach ($invoices as $inv): ?>
+            <?php
+              $paid = $paidMap[(int) $inv['id']] ?? 0.0;
+              $bal  = max(0.0, round((float) $inv['total'] - $paid, 2));
+              $eff  = invoice_effective_status($inv, $paid);
+            ?>
             <tr>
               <td>
                 <a href="<?= e(url('pages/invoice-view.php?id=' . $inv['id'])) ?>">
@@ -124,7 +145,8 @@ include __DIR__ . '/../includes/app-header.php';
               <td><?= e(date('j M Y', strtotime($inv['issue_date']))) ?></td>
               <td><?= $inv['due_date'] ? e(date('j M Y', strtotime($inv['due_date']))) : '<span class="muted">—</span>' ?></td>
               <td class="num"><?= e($inv['currency']) ?> <?= e(number_format((float) $inv['total'], 2)) ?></td>
-              <td><?= doc_status_badge('invoice', $inv['status']) ?></td>
+              <td class="num"><?= e($inv['currency']) ?> <?= e(number_format($bal, 2)) ?></td>
+              <td><?= doc_status_badge('invoice', $eff) ?></td>
               <td class="actions">
                 <a class="btn btn--ghost btn--sm"
                    href="<?= e(url('pages/invoice-view.php?id=' . $inv['id'])) ?>"

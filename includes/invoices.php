@@ -228,3 +228,101 @@ function invoice_duplicate(int $id): ?int
     ];
     return invoice_create($meta, $items);
 }
+
+
+/**
+ * Effective display status for an invoice.
+ * Base lifecycle stays in the stored column; payment states are computed.
+ * Returns one of: draft|sent|pending|partially_paid|paid|overdue|cancelled.
+ */
+function invoice_effective_status(array $invoice, ?float $paidOverride = null): string
+{
+    $stored = $invoice['status'];
+
+    if ($stored === 'draft' || $stored === 'cancelled') {
+        return $stored;
+    }
+
+    $paid  = $paidOverride !== null
+        ? round($paidOverride, 2)
+        : invoice_paid_total((int) $invoice['id']);
+    $total = round((float) $invoice['total'], 2);
+    $bal   = round($total - $paid, 2);
+    if ($bal < 0) $bal = 0.0;
+
+    if ($total > 0 && $bal <= 0.0001) {
+        return 'paid';
+    }
+
+    $due = $invoice['due_date'] ?? null;
+    if ($due && $due < date('Y-m-d')) {
+        return 'overdue';
+    }
+
+    if ($paid > 0) {
+        return 'partially_paid';
+    }
+
+    return $stored === 'sent' || $stored === 'pending' ? $stored : 'sent';
+}
+
+/**
+ * Balances for a set of invoice ids, in one query.
+ * Returns [invoice_id => ['paid' => float, 'balance' => float]].
+ */
+function invoices_paid_map(array $invoiceIds): array
+{
+    $biz = current_business();
+    if (!$biz || !$invoiceIds) return [];
+
+    $placeholders = implode(',', array_fill(0, count($invoiceIds), '?'));
+    $args = array_merge([$biz['id']], $invoiceIds);
+
+    $stmt = db()->prepare(
+        "SELECT invoice_id, COALESCE(SUM(amount),0) AS paid
+         FROM payments
+         WHERE business_id = ? AND invoice_id IN ($placeholders)
+         GROUP BY invoice_id"
+    );
+    $stmt->execute($args);
+
+    $map = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $map[(int) $row['invoice_id']] = round((float) $row['paid'], 2);
+    }
+    return $map;
+}
+
+
+/**
+ * Total amount paid against an invoice, from persisted payment rows.
+ */
+function invoice_paid_total(int $invoiceId, ?int $excludePaymentId = null): float
+{
+    $biz = current_business();
+    if (!$biz) return 0.0;
+
+    $sql = 'SELECT COALESCE(SUM(amount), 0)
+            FROM payments
+            WHERE invoice_id = ? AND business_id = ?';
+    $args = [$invoiceId, $biz['id']];
+
+    if ($excludePaymentId !== null) {
+        $sql .= ' AND id <> ?';
+        $args[] = $excludePaymentId;
+    }
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute($args);
+    return round((float) $stmt->fetchColumn(), 2);
+}
+
+/**
+ * Outstanding balance for an invoice. Never below zero.
+ */
+function invoice_balance(array $invoice, ?int $excludePaymentId = null): float
+{
+    $paid = invoice_paid_total((int) $invoice['id'], $excludePaymentId);
+    $bal  = round((float) $invoice['total'] - $paid, 2);
+    return $bal < 0 ? 0.0 : $bal;
+}

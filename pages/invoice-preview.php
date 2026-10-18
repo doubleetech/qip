@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/invoices.php';
+require_once __DIR__ . '/../includes/payments.php';
 require_business();
 
 $id = (int) get('id', 0);
@@ -10,8 +11,16 @@ if (!$inv) {
     exit('Invoice not found.');
 }
 
-$items = invoice_items($id);
-$biz = current_business();
+$items   = invoice_items($id);
+$biz     = current_business();
+$paid    = invoice_paid_total($id);
+$balance = max(0.0, round((float) $inv['total'] - $paid, 2));
+$eff     = invoice_effective_status($inv, $paid);
+
+$hasBank   = $biz['bank_name'] || $biz['bank_account_name'] || $biz['bank_account_number'] || $biz['bank_instructions'];
+$hasPayUrl = !empty($biz['payment_url']);
+$hasCrypto = $biz['crypto_network'] || $biz['crypto_address'];
+$hasInstr  = $hasBank || $hasPayUrl || $hasCrypto;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -52,16 +61,23 @@ $biz = current_business();
   .doc__totals .row b { color:var(--text-light); font-variant-numeric:tabular-nums; font-weight:600; }
   .doc__totals .row.grand { border-top:1px solid var(--light-200); padding-top:14px; margin-top:6px; font-size:1.1rem; color:var(--text-light); }
   .doc__totals .row.grand b { font-family:var(--font-display); font-size:1.5rem; }
+  .doc__totals .row.paid b { color:#15803d; }
+  .doc__totals .row.balance b { color:#b91c1c; }
   .doc__notes { margin-top:40px; padding-top:24px; border-top:1px solid var(--light-200); }
   .doc__notes h3 { font-family:var(--font-display); font-size:1rem; margin:0 0 8px; color:var(--text-light); }
   .doc__notes p { font-size:.9rem; color:var(--text-light-muted); white-space:pre-wrap; margin:0 0 20px; }
+  .doc__instr { margin-top:32px; padding:20px 24px; border:1px solid var(--light-200); border-radius:10px; }
+  .doc__instr h3 { font-family:var(--font-display); font-size:1rem; margin:0 0 12px; }
+  .doc__instr .row { display:flex; gap:8px; font-size:.9rem; color:var(--text-light-muted); margin-bottom:6px; }
+  .doc__instr .row strong { color:var(--text-light); min-width:120px; }
+  .doc__instr .row a { color:#15803d; word-break:break-all; }
   .doc__print { text-align:center; margin:24px auto 0; }
   @media print {
     @page { margin: 14mm; }
     body { background:#fff; padding:0; }
     .doc { box-shadow:none; border-radius:0; padding:0; max-width:none; margin:0; }
     .doc__print { display:none; }
-    .doc__top, .doc__grid, .doc__notes, .doc__totals { page-break-inside: avoid; }
+    .doc__top, .doc__grid, .doc__notes, .doc__totals, .doc__instr { page-break-inside: avoid; }
     table.doc-table tr { page-break-inside: avoid; }
   }
 </style>
@@ -85,7 +101,7 @@ $biz = current_business();
     <div class="doc__meta">
       <h1>INVOICE</h1>
       <div class="doc__num"><?= e($inv['number']) ?></div>
-      <div class="doc__status"><?= e(ucfirst($inv['status'])) ?></div>
+      <div class="doc__status"><?= e(str_replace('_', ' ', ucfirst($eff))) ?></div>
     </div>
   </div>
 
@@ -153,12 +169,60 @@ $biz = current_business();
       <div class="row"><span>Tax (<?= e(number_format((float) $inv['tax_rate'], 2)) ?>%)</span><b><?= e(number_format((float) $inv['tax_amount'], 2)) ?></b></div>
     <?php endif; ?>
     <div class="row grand"><span>Total</span><b><?= e($inv['currency']) ?> <?= e(number_format((float) $inv['total'], 2)) ?></b></div>
+
+    <?php if ($paid > 0): ?>
+      <div class="row paid"><span>Paid</span><b>- <?= e($inv['currency']) ?> <?= e(number_format($paid, 2)) ?></b></div>
+      <div class="row balance"><span>Balance due</span><b><?= e($inv['currency']) ?> <?= e(number_format($balance, 2)) ?></b></div>
+    <?php endif; ?>
   </div>
 
   <?php if ($inv['notes'] || $inv['payment_terms']): ?>
     <div class="doc__notes">
       <?php if ($inv['notes']): ?><h3>Notes</h3><p><?= e($inv['notes']) ?></p><?php endif; ?>
-      <?php if ($inv['payment_terms']): ?><h3>Payment instructions</h3><p><?= e($inv['payment_terms']) ?></p><?php endif; ?>
+      <?php if ($inv['payment_terms']): ?><h3>Payment instructions (invoice)</h3><p><?= e($inv['payment_terms']) ?></p><?php endif; ?>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($hasInstr): ?>
+    <div class="doc__instr">
+      <h3>How to pay</h3>
+
+      <?php if ($hasBank): ?>
+        <?php if ($biz['bank_name']): ?>
+          <div class="row"><strong>Bank</strong><span><?= e($biz['bank_name']) ?></span></div>
+        <?php endif; ?>
+        <?php if ($biz['bank_account_name']): ?>
+          <div class="row"><strong>Account name</strong><span><?= e($biz['bank_account_name']) ?></span></div>
+        <?php endif; ?>
+        <?php if ($biz['bank_account_number']): ?>
+          <div class="row"><strong>Account number</strong><span><?= e($biz['bank_account_number']) ?></span></div>
+        <?php endif; ?>
+        <?php if ($biz['bank_instructions']): ?>
+          <div class="row" style="display:block;white-space:pre-wrap;margin-top:6px;">
+            <?= e($biz['bank_instructions']) ?>
+          </div>
+        <?php endif; ?>
+      <?php endif; ?>
+
+      <?php if ($hasPayUrl): ?>
+        <div class="row" style="margin-top:10px;">
+          <strong>Pay online</strong>
+          <span><a href="<?= e($biz['payment_url']) ?>" target="_blank" rel="noopener noreferrer"><?= e($biz['payment_url']) ?></a></span>
+        </div>
+      <?php endif; ?>
+
+      <?php if ($hasCrypto): ?>
+        <?php if ($biz['crypto_network']): ?>
+          <div class="row" style="margin-top:10px;"><strong>Network</strong><span><?= e($biz['crypto_network']) ?></span></div>
+        <?php endif; ?>
+        <?php if ($biz['crypto_address']): ?>
+          <div class="row"><strong>Wallet</strong><span style="word-break:break-all;"><?= e($biz['crypto_address']) ?></span></div>
+        <?php endif; ?>
+      <?php endif; ?>
+
+      <div class="muted" style="font-size:.78rem;margin-top:12px;">
+        Instructions only — QIP does not verify transfers or mark this invoice paid automatically.
+      </div>
     </div>
   <?php endif; ?>
 

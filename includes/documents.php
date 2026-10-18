@@ -154,22 +154,24 @@ function doc_validate_input(array $in): array
 
 /**
  * Status badge HTML for a quote or invoice.
+ * Invoice payment states are computed by invoice_effective_status().
  */
 function doc_status_badge(string $type, string $status): string
 {
     $map = [
-        // quotes
-        'draft'     => ['draft',   'Draft'],
-        'sent'      => ['info',    'Sent'],
-        'accepted'  => ['paid',    'Accepted'],
-        'rejected'  => ['overdue', 'Rejected'],
-        'expired'   => ['pending', 'Expired'],
-        // invoices
-        'pending'   => ['pending', 'Pending'],
-        'cancelled' => ['overdue', 'Cancelled'],
+        'draft'          => ['draft',          'Draft'],
+        'sent'           => ['info',           'Sent'],
+        'pending'        => ['pending',        'Pending'],
+        'accepted'       => ['paid',           'Accepted'],
+        'rejected'       => ['overdue',        'Rejected'],
+        'expired'        => ['pending',        'Expired'],
+        'cancelled'      => ['overdue',        'Cancelled'],
+        'partially_paid' => ['pending',        'Partially paid'],
+        'paid'           => ['paid',           'Paid'],
+        'overdue'        => ['overdue',        'Overdue'],
     ];
 
-    [$cls, $label] = $map[$status] ?? ['draft', ucfirst($status)];
+    [$cls, $label] = $map[$status] ?? ['draft', ucfirst(str_replace('_', ' ', $status))];
     return '<span class="badge badge--' . e($cls) . '">' . e($label) . '</span>';
 }
 

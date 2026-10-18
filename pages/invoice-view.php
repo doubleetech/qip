@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/invoices.php';
+require_once __DIR__ . '/../includes/payments.php';
 require_business();
 
 $id = (int) get('id', 0);
@@ -11,7 +12,12 @@ if (!$inv) {
     redirect('pages/invoices.php');
 }
 
-$items = invoice_items($id);
+$items   = invoice_items($id);
+$paid    = invoice_paid_total($id);
+$balance = max(0.0, round((float) $inv['total'] - $paid, 2));
+$eff     = invoice_effective_status($inv, $paid);
+$history = payments_for_invoice($id);
+$canPay  = !in_array($inv['status'], ['draft', 'cancelled'], true) && $balance > 0.0001;
 
 $page_title = $inv['number'];
 include __DIR__ . '/../includes/app-header.php';
@@ -50,21 +56,27 @@ include __DIR__ . '/../includes/app-header.php';
   </div>
 <?php endif; ?>
 
-<div class="grid-3" style="margin-bottom:20px;">
+<div class="grid-4" style="margin-bottom:20px;">
   <div class="card"><div class="card__body">
     <div class="muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;">Status</div>
-    <div style="margin-top:8px;"><?= doc_status_badge('invoice', $inv['status']) ?></div>
-  </div></div>
-  <div class="card"><div class="card__body">
-    <div class="muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;">Due date</div>
-    <div style="font-family:var(--font-display);font-size:1.15rem;font-weight:700;margin-top:6px;">
-      <?= $inv['due_date'] ? e(date('j M Y', strtotime($inv['due_date']))) : '—' ?>
-    </div>
+    <div style="margin-top:8px;"><?= doc_status_badge('invoice', $eff) ?></div>
   </div></div>
   <div class="card"><div class="card__body">
     <div class="muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;">Total</div>
-    <div style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;margin-top:4px;">
+    <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;margin-top:4px;">
       <?= e($inv['currency']) ?> <?= e(number_format((float) $inv['total'], 2)) ?>
+    </div>
+  </div></div>
+  <div class="card"><div class="card__body">
+    <div class="muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;">Paid</div>
+    <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;margin-top:4px;">
+      <?= e($inv['currency']) ?> <?= e(number_format($paid, 2)) ?>
+    </div>
+  </div></div>
+  <div class="card"><div class="card__body">
+    <div class="muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;">Balance</div>
+    <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;margin-top:4px;">
+      <?= e($inv['currency']) ?> <?= e(number_format($balance, 2)) ?>
     </div>
   </div></div>
 </div>
@@ -74,21 +86,18 @@ include __DIR__ . '/../includes/app-header.php';
   <div class="card__body">
     <div class="row" style="flex-wrap:wrap;gap:8px;">
 
+      <?php if ($canPay): ?>
+        <a class="btn btn--primary" href="<?= e(url('pages/payment-form.php?invoice_id=' . $inv['id'])) ?>">
+          <i class="fa-solid fa-money-bill-wave"></i> Record payment
+        </a>
+      <?php endif; ?>
+
       <?php if ($inv['status'] === 'draft'): ?>
         <form method="post" action="<?= e(url('pages/invoice-status.php')) ?>" style="display:inline;">
           <?= csrf_field() ?>
           <input type="hidden" name="id" value="<?= (int) $inv['id'] ?>">
           <input type="hidden" name="status" value="sent">
-          <button class="btn btn--primary"><i class="fa-solid fa-paper-plane"></i> Mark as sent</button>
-        </form>
-      <?php endif; ?>
-
-      <?php if ($inv['status'] === 'sent'): ?>
-        <form method="post" action="<?= e(url('pages/invoice-status.php')) ?>" style="display:inline;">
-          <?= csrf_field() ?>
-          <input type="hidden" name="id" value="<?= (int) $inv['id'] ?>">
-          <input type="hidden" name="status" value="pending">
-          <button class="btn btn--primary"><i class="fa-solid fa-clock"></i> Mark as pending</button>
+          <button class="btn btn--ghost"><i class="fa-solid fa-paper-plane"></i> Mark as sent</button>
         </form>
       <?php endif; ?>
 
@@ -98,7 +107,7 @@ include __DIR__ . '/../includes/app-header.php';
           <?= csrf_field() ?>
           <input type="hidden" name="id" value="<?= (int) $inv['id'] ?>">
           <input type="hidden" name="status" value="cancelled">
-          <button class="btn btn--danger"><i class="fa-solid fa-ban"></i> Cancel invoice</button>
+          <button class="btn btn--danger"><i class="fa-solid fa-ban"></i> Cancel</button>
         </form>
       <?php endif; ?>
 
@@ -119,6 +128,57 @@ include __DIR__ . '/../includes/app-header.php';
 
     </div>
   </div>
+</div>
+
+<div class="card" style="margin-bottom:20px;">
+  <div class="card__head">
+    <h2 class="card__title">Payment history</h2>
+    <?php if ($canPay): ?>
+      <div style="margin-left:auto;">
+        <a class="btn btn--ghost btn--sm" href="<?= e(url('pages/payment-form.php?invoice_id=' . $inv['id'])) ?>">
+          <i class="fa-solid fa-plus"></i> Add payment
+        </a>
+      </div>
+    <?php endif; ?>
+  </div>
+
+  <?php if (!$history): ?>
+    <div class="card__body">
+      <p class="muted" style="margin:0;">No payments recorded against this invoice.</p>
+    </div>
+  <?php else: ?>
+    <div class="table-wrap" style="border:0;border-radius:0;">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Receipt</th>
+            <th>Date</th>
+            <th>Method</th>
+            <th>Reference</th>
+            <th class="num">Amount</th>
+            <th class="actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($history as $h): ?>
+            <tr>
+              <td><a href="<?= e(url('pages/payment-view.php?id=' . $h['id'])) ?>"><?= e($h['receipt_number'] ?: '—') ?></a></td>
+              <td><?= e(date('j M Y', strtotime($h['payment_date']))) ?></td>
+              <td><?= e(PAYMENT_METHODS[$h['method']] ?? ucfirst($h['method'])) ?></td>
+              <td><?= $h['reference'] ? e($h['reference']) : '<span class="muted">—</span>' ?></td>
+              <td class="num"><?= e($inv['currency']) ?> <?= e(number_format((float) $h['amount'], 2)) ?></td>
+              <td class="actions">
+                <a class="btn btn--ghost btn--sm" href="<?= e(url('pages/receipt.php?id=' . $h['id'])) ?>" target="_blank"
+                   aria-label="Receipt">
+                  <i class="fa-solid fa-receipt"></i>
+                </a>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  <?php endif; ?>
 </div>
 
 <div class="card">
